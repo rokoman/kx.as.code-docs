@@ -1,0 +1,115 @@
+variables:
+    sourceRepoLocation: kx.as.code
+    tempLocation: tmp
+    targetMkDocsLocation: docs
+
+stages:
+    - build
+    - deploy
+    - performance-test
+    - security-test
+
+docker-build:
+  image: ${DOCKER_REGISTRY_DOMAIN}/devops/docker:19.03.13-dind
+  stage: build
+  services:
+    - docker:dind
+  before_script:
+    - echo ${REGISTRY_ROBOT_PASSWORD} | docker login -u ${REGISTRY_ROBOT_USER} --password-stdin ${DOCKER_REGISTRY_DOMAIN}
+  script:
+    - pip3 install -r requirements.txt
+    - export PATH=$PATH:~/.local/bin
+    - mkdir -p ${PWD}/${tempLocation}
+    - mkdir -p ${PWD}/${targetMkDocsLocation}
+    - ls -altR
+    - git clone https://${GIT_USER}:${PERSONAL_ACCESS_TOKEN}@${GIT_DOMAIN}/kx.as.code/kx.as.code
+    - cp -rf ${PWD}/$sourceRepoLocation/* ${PWD}/${tempLocation}/
+    - cp -rf ${PWD}/images ${targetMkDocsLocation}
+    - cp -rf ${PWD}/kx.as.code/images/* ${targetMkDocsLocation}/images/
+    - find ${PWD}/${tempLocation} -type f -iname "*.md" -exec sed -i '/Zero2Hero_Logo_Black\.png/d' {} +
+    - find ${PWD}/${tempLocation} -type f -iname "*.md" -exec sed -i '/kxascode_logo_black_small\.png/d' {} +
+    - find ${PWD}/${tempLocation} -type f -iname "*.md" -exec sed -i '/# README/d' {} +
+    - |
+        set -x
+        files=$(find ${PWD}/${tempLocation} -mindepth 1 -iregex '.*\.\(md\|png\|jpg\)$' -not -path "${PWD}/${tempLocation}/base-vm/*" -printf '%P\n')
+        for file in "${files}"
+        do
+            if [[ "${file}" != *'TEMPLATE'* ]] && [[ "${file}" != *'WIP'* ]]; then
+                echo "File:\"${file}\""
+                pathDepth=$(echo "${file}" | grep -o "/" | wc -l || true)
+                echo "Before if"
+                if [[ $pathDepth -lt 1 ]]; then
+                    echo "Depth only 0. Copy file only without creating a directory"
+                    cp -f ${PWD}/${tempLocation}/"${file}" ${PWD}/${targetMkDocsLocation}
+                else
+                    echo "Path Depth => 1. Creating file and directory"
+                    newFile=$(printf '%s' "${file}" | sed 's/[_]//g' | sed -e 's/\b\(.\)/\u\1/g')
+                    newFilePath="${newFile%/*}/"
+                    newFilePath=$(echo "${newFilePath}" | sed 's/\/*$//g')
+                    if [[ "${newFilePath}" =~ '/' ]]; then
+                        echo "Creating directory \"${newFilePath}\""
+                        mkdir -p $(dirname ${targetMkDocsLocation}/"${newFilePath}")
+                    fi
+                    if [[ "${file}" =~ 'README.md' ]] && [[ $pathDepth > 2 ]]; then
+                        cp -f ${PWD}/${tempLocation}/"${file}" ${PWD}/${targetMkDocsLocation}/"${newFilePath}.md"
+                    else
+                        cp -f ${PWD}/${tempLocation}/"${file}" $(dirname ${PWD}/${targetMkDocsLocation}/"${newFilePath}")
+                    fi
+                fi
+            fi
+        done
+        echo "End of loop"
+        which mkdocs
+    - mkdocs build --clean
+    - docker build -t ${DOCKER_REGISTRY_DOMAIN}/kx-as-code/docs:${CI_PIPELINE_ID} .
+  only:
+    - master
+
+deploy-image:
+  image: ${DOCKER_REGISTRY_DOMAIN}/devops/docker:19.03.13-dind
+  stage: deploy
+  script:
+    - git clone https://${GIT_USER}:${PERSONAL_ACCESS_TOKEN}@${GIT_DOMAIN}/kx.as.code/kx.as.code_docs ./kx.as.code_docs_tmp    
+    - cd kx.as.code_docs_tmp
+    - export ESCAPED_DOCKER_REGISTRY_DOMAIN=$(echo ${DOCKER_REGISTRY_DOMAIN} | sed 's/\./\\./g')
+    - sed -i "s/\(image:\).*\$/\1 ${ESCAPED_DOCKER_REGISTRY_DOMAIN}\/kx-as-code\/docs:${CI_PIPELINE_ID}/" kubernetes/deployment.yaml
+    - cat kubernetes/deployment.yaml
+    - git add kubernetes/deployment.yaml
+    - git config --global user.email "kx.hero@${BASE_DOMAIN}"
+    - git config --global user.name "KX Hero"
+    - git commit -m "Deployed Docs version ${CI_PIPELINE_ID}"
+    - git push -o ci.skip origin master
+    - cd ..; rm -rf kx.as.code_docs_tmp
+  only:
+    - master
+
+performance-test:
+  image: ${DOCKER_REGISTRY_DOMAIN}/devops/docker:19.03.13-dind
+  stage: performance-test
+  services:
+    - docker:dind
+  script:
+    - mkdir -p ${PWD}/public/sitespeed.io
+    - graphiteHostIp=$(getent hosts graphite.monitoring | awk '{print $1}')
+    - >- 
+      docker run --rm --shm-size=1g -v "${PWD}/public/sitespeed.io":/sitespeed.io sitespeedio/sitespeed.io:14.0.0
+      --plugins.add analysisstorer
+      --outputFolder output
+      --graphite.host ${graphiteHostIp}
+      --graphite.port 2003
+      https://docs.${BASE_DOMAIN}
+      -b chrome
+      -n 1
+
+security-test:
+  image: ${DOCKER_REGISTRY_DOMAIN}/devops/docker:19.03.13-dind
+  stage: security-test
+  services:
+    - docker:dind
+  script:
+    - mkdir -p ${PWD}/public/owasp-zap
+    - >- 
+      docker run -t --name OWASP-ZAP -v "${PWD}/public/owasp-zap":/zap/wrk/:rw owasp/zap2docker-stable zap-baseline.py 
+      -J owasp_zap_report.json -r owasp_zap_report.html -t https://docs.${BASE_DOMAIN} || true
+    - docker logs OWASP-ZAP > ${PWD}/public/owasp-zap/owasp-zap.log
+    - docker rm -f OWASP-ZAP

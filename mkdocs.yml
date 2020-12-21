@@ -1,0 +1,36 @@
+site_name: 'KX.AS.CODE Docs'
+repo_url: 'https://lwa.accenture.com/gitlab/kx.as.code'
+repo_name: 'GitLab'
+site_description: 'This site is a consolidation of all documentation in the KX.AS.CODE GitLab repository'
+site_author: 'kx.as.code@accenture.com'
+theme:
+  name: material
+  features:
+    - tabs
+  favicon: images/favicon.png
+  logo: images/accenture.png
+  colorscheme: github
+  highlightjs: true
+  hljs_languages:
+    - yaml
+    - rust
+markdown_extensions:
+  - attr_list
+  - pymdownx.arithmatex
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.critic
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.inlinehilite
+  - pymdownx.magiclink
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tabbed
+  - pymdownx.tilde
