@@ -8,7 +8,7 @@ pip3 install -r requirements.txt
 export PATH=$PATH:/home/$VM_USER/.local/bin
 
 # Copy Latest README.md Docs
-/home/$VM_USER/Documents/kx.as.code_docs/createKxDocs.sh
+/usr/share/kx.as.code/git/kx.as.code_docs/createKxDocs.sh
 
 # Build Site
 mkdocs build --clean

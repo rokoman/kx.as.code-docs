@@ -11,7 +11,7 @@ do
 done
 
 # Install the desktop shortcut
-. /home/$VM_USER/Documents/kx.as.code_source/play-pit/base/createDesktopShortcut.sh \
+. /usr/share/kx.as.code/git/kx.as.code/play-pit/base/createDesktopShortcut.sh \
   --name="KX.AS.CODE Docs" \
   --url=https://docs.${baseDomain} \
-  --icon=/home/$VM_USER/Documents/kx.as.code_docs/kubernetes/books.png
+  --icon=/usr/share/kx.as.code/git/kx.as.code_docs/kubernetes/books.png
