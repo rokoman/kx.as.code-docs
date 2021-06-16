@@ -1,4 +1,5 @@
 #!/bin/bash -x
+set -euo pipefail
 
 . /etc/environment
 export VM_USER=$vmUser
@@ -18,30 +19,32 @@ find $tempLocation -type f -iname "*.md" -exec sed -i '/# README/d' {} +
 
 files=$(find $tempLocation -mindepth 1 -iregex '.*\.\(md\|png\|jpg\)$' -not -path "$tempLocation/base-vm/*" -printf '%P\n')
 
+OLDIFS=$IFS
+IFS=$(echo -en "\n\b")
 for file in $files
 do
   if [[ "$file" != *'TEMPLATE'* ]] && [[ "$file" != *'WIP'* ]]; then
     echo "File: $file"
-    PATH_DEPTH=$(echo $file | grep -o "/" | wc -l)
+    PATH_DEPTH=$(echo "$file" | grep -o "/" | wc -l || true)
     if [[ $PATH_DEPTH < 1 ]]; then
       echo "Depth only $PATH_DEPTH. Copy file only without creating a directory"
-      cp -f $tempLocation/$file $targetMkDocsLocation
+      cp -f "$tempLocation"/"$file" "$targetMkDocsLocation"
     else
       echo "Path Depth => 1. Creating file and directory"
       newFile=$(printf '%s' "$file" | sed 's/[_]//g' | sed -e 's/\b\(.\)/\u\1/g')
       newFilePath="${newFile%/*}/"
-      newFilePath=$(echo $newFilePath | sed 's/\/*$//g')
+      newFilePath=$(echo "$newFilePath" | sed 's/\/*$//g')
       if [[ "$newFilePath" =~ '/' ]]; then
         echo "Creating directory $newFilePath"
-        mkdir -p $(dirname $targetMkDocsLocation/$newFilePath)
+        mkdir -p $(dirname "$targetMkDocsLocation/$newFilePath")
       fi
       if [[ "$file" =~ 'README.md' ]] && [[ $PATH_DEPTH > 2 ]]; then
-        cp -f $tempLocation/$file $targetMkDocsLocation/$newFilePath".md"
+        cp -f "$tempLocation/$file" "$targetMkDocsLocation/$newFilePath.md"
       else
-        cp -f $tempLocation/$file $(dirname $targetMkDocsLocation/$newFilePath)
+        cp -f "$tempLocation/$file" $(dirname "$targetMkDocsLocation/$newFilePath")
       fi
     fi
   fi
 done
-
+IFS=$OLDIFS
 rm -rf $tempLocation
